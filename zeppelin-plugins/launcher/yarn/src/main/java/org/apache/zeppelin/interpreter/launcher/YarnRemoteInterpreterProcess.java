@@ -258,6 +258,14 @@ public class YarnRemoteInterpreterProcess extends RemoteInterpreterProcess {
       addResource(fs, destPath, localResources, LocalResourceType.ARCHIVE, "flink");
       FileUtils.forceDelete(flinkZip);
 
+      String hadoopConfDir = launchContext.getProperties().getProperty("HADOOP_CONF_DIR");
+      if (!org.apache.commons.lang3.StringUtils.isBlank(hadoopConfDir)) {
+        File hadoopConfZipFile = createHadoopConfZip(new File(hadoopConfDir));
+        srcPath = localFs.makeQualified(new Path(hadoopConfZipFile.toURI()));
+        destPath = copyFileToRemote(stagingDir, srcPath, (short) 1);
+        addResource(fs, destPath, localResources, LocalResourceType.ARCHIVE, "hadoop_conf");
+      }
+
       String hiveConfDir = launchContext.getProperties().getProperty("HIVE_CONF_DIR");
       if (!org.apache.commons.lang3.StringUtils.isBlank(hiveConfDir)) {
         File hiveConfZipFile = createHiveConfZip(new File(hiveConfDir));
@@ -306,6 +314,7 @@ public class YarnRemoteInterpreterProcess extends RemoteInterpreterProcess {
       this.envs.put("FLINK_LIB_DIR", ApplicationConstants.Environment.PWD.$() + "/flink/lib");
       this.envs.put("FLINK_PLUGINS_DIR", ApplicationConstants.Environment.PWD.$() + "/flink/plugins");
       this.envs.put("HIVE_CONF_DIR", ApplicationConstants.Environment.PWD.$() + "/hive_conf");
+      this.envs.put("HADOOP_CONF_DIR", ApplicationConstants.Environment.PWD.$() + "/hadoop_conf");
     }
     // set -Xmx
     int memory = Integer.parseInt(
@@ -492,6 +501,23 @@ public class YarnRemoteInterpreterProcess extends RemoteInterpreterProcess {
     flinkZipStream.flush();
     flinkZipStream.close();
     return flinkArchive;
+  }
+
+  private File createHadoopConfZip(File hadoopConfDir) throws IOException {
+    File hadoopConfArchive = File.createTempFile("hadoop_conf", ".zip", Files.createTempDir());
+    ZipOutputStream hadoopConfZipStream = new ZipOutputStream(new FileOutputStream(hadoopConfArchive));
+    hadoopConfZipStream.setLevel(0);
+
+    if (!hadoopConfDir.exists()) {
+      throw new IOException("HADOOP_CONF_DIR " + hadoopConfDir.getAbsolutePath() + " doesn't exist");
+    }
+    for (File file : hadoopConfDir.listFiles()) {
+      addFileToZipStream(hadoopConfZipStream, file, null);
+    }
+
+    hadoopConfZipStream.flush();
+    hadoopConfZipStream.close();
+    return hadoopConfArchive;
   }
 
   private File createHiveConfZip(File hiveConfDir) throws IOException {
